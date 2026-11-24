@@ -1,0 +1,8 @@
+com\cardapio\Prato.class
+com\cardapio\Pedido.class
+com\cardapio\ApiController$PedidoRequest.class
+com\cardapio\ApiController.class
+com\cardapio\ApiController$ItemPedido.class
+com\cardapio\PedidoRepository.class
+com\cardapio\CardapioApplication.class
+com\cardapio\PratoRepository.class

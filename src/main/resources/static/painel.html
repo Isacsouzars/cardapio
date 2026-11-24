@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel</title>
+<style>
+  body{font-family:system-ui,sans-serif;margin:0;padding:16px;background:#f2f2f2;max-width:900px;margin:auto}
+  .box{background:#fff;border-radius:10px;padding:12px;margin:12px 0;box-shadow:0 1px 3px #0002}
+  .NOVO{border-left:6px solid #d33}.PREPARANDO{border-left:6px solid #e90}.PRONTO{border-left:6px solid #2a2}.ENTREGUE{opacity:.5}
+  input,textarea{display:block;width:100%;box-sizing:border-box;margin:4px 0 8px;padding:6px}
+  pre{margin:4px 0;font-family:inherit}
+  button{padding:6px 10px;margin:2px}
+</style>
+</head>
+<body>
+<h2>Painel do restaurante</h2>
+<div class="box">Senha: <input id="tk" type="password" onchange="sessionStorage.t=this.value;iniciar()"></div>
+
+<h3>Pedidos</h3><div id="pedidos"></div>
+
+<h3>Cadastrar / editar prato</h3>
+<div class="box">
+  <input id="nome" placeholder="Nome"><textarea id="desc" placeholder="Descrição"></textarea>
+  <input id="preco" type="number" step="0.01" placeholder="Preço"><input id="cat" placeholder="Categoria (ex.: Pratos, Bebidas)">
+  Modelo .glb (Android/navegador): <input id="glb" type="file" accept=".glb">
+  Modelo .usdz (iPhone): <input id="usdz" type="file" accept=".usdz">
+  <button onclick="salvar()">Salvar prato</button>
+</div>
+<h3>Pratos</h3><div id="pratos"></div>
+
+<script>
+const H = () => ({ 'X-Admin-Token': sessionStorage.t || '' });
+const J = () => ({ ...H(), 'Content-Type': 'application/json' });
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let ultimo = 0, timer;
+
+function iniciar() { clearInterval(timer); pedidos(); pratos(); timer = setInterval(pedidos, 5000); }
+
+async function pedidos() {
+  const r = await fetch('/api/admin/pedidos', { headers: H() });
+  if (!r.ok) return document.getElementById('pedidos').textContent = 'Senha incorreta.';
+  const l = await r.json();
+  if (l.length > ultimo && ultimo) document.title = '🔔 Novo pedido!';
+  ultimo = l.length;
+  document.getElementById('pedidos').innerHTML = l.map(p => `<div class="box ${p.status}">
+    <b>#${p.id} · Mesa ${esc(p.mesa)}</b> · ${esc(p.status)} · R$ ${p.total}
+    <pre>${esc(p.itens)}</pre>${p.obs ? '<i>Obs: ' + esc(p.obs) + '</i><br>' : ''}
+    ${['PREPARANDO', 'PRONTO', 'ENTREGUE'].map(s => `<button onclick="status(${p.id},'${s}')">${s}</button>`).join('')}</div>`).join('');
+}
+async function status(id, v) { await fetch(`/api/admin/pedidos/${id}/status?valor=${v}`, { method: 'POST', headers: H() }); pedidos(); }
+
+async function pratos() {
+  const l = await (await fetch('/api/admin/pratos', { headers: H() })).json();
+  window.lista = l;
+  document.getElementById('pratos').innerHTML = l.map(p => `<div class="box">
+    <b>${esc(p.nome)}</b> · R$ ${p.preco} · ${p.disponivel ? 'ativo' : 'oculto'} · ${p.modeloGlb ? '3D ✔' : 'sem 3D'}
+    <button onclick="alternar(${p.id})">${p.disponivel ? 'Ocultar' : 'Ativar'}</button>
+    <button onclick="apagar(${p.id})">Apagar</button></div>`).join('');
+}
+async function alternar(id) {
+  const p = window.lista.find(x => x.id === id); p.disponivel = !p.disponivel;
+  await fetch('/api/admin/pratos', { method: 'POST', headers: J(), body: JSON.stringify(p) }); pratos();
+}
+async function apagar(id) { if (confirm('Apagar?')) { await fetch('/api/admin/pratos/' + id, { method: 'DELETE', headers: H() }); pratos(); } }
+
+async function enviarArq(input) {
+  if (!input.files[0]) return null;
+  const f = new FormData(); f.append('arquivo', input.files[0]);
+  const r = await fetch('/api/admin/upload', { method: 'POST', headers: H(), body: f });
+  if (!r.ok) throw new Error('upload falhou');
+  return (await r.json()).url;
+}
+async function salvar() {
+  try {
+    const p = { nome: nome.value, descricao: desc.value, preco: preco.value, categoria: cat.value, disponivel: true,
+      modeloGlb: await enviarArq(glb), modeloUsdz: await enviarArq(usdz) };
+    await fetch('/api/admin/pratos', { method: 'POST', headers: J(), body: JSON.stringify(p) });
+    document.querySelectorAll('input,textarea').forEach(e => { if (e.id != 'tk') e.value = ''; });
+    pratos();
+  } catch (e) { alert(e.message); }
+}
+if (sessionStorage.t) { tk.value = sessionStorage.t; iniciar(); }
+</script>
+</body>
+</html>
